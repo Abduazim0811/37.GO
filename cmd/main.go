@@ -1,95 +1,65 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	Server struct {
-		Host string `yaml:"host"`
-		Port string `yaml:"port"`
-	} `yaml:"server"`
-}
-
 type Album struct {
+	ID     string  `json:"id"`
 	Title  string  `json:"title"`
 	Artist string  `json:"artist"`
 	Price  float64 `json:"price"`
 }
 
-var albums []Album
-
-func loadConfig(filename string) (Config, error) {
-	var config Config
-	file, err := os.Open(filename)
-	if err != nil {
-		return config, err
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	err = decoder.Decode(&config)
-	return config, err
+var albums = []Album{
+	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
+	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
+	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
 }
 
-func loadAlbums(filename string) ([]Album, error) {
-	var albums []Album
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&albums)
-	return albums, err
-}
-
-func filterAlbums(query string) []Album {
-	var result []Album
-	for _, album := range albums {
-		if strings.Contains(strings.ToLower(album.Title), strings.ToLower(query)) ||
-			strings.Contains(strings.ToLower(album.Artist), strings.ToLower(query)) ||
-			strings.Contains(fmt.Sprintf("%.2f", album.Price), query) {
-			result = append(result, album)
-		}
-	}
-	return result
-}
-
-func albumsHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("filter")
-	var result []Album
-	if query != "" {
-		result = filterAlbums(query)
-	} else {
-		result = albums
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+type Config struct {
+	Server struct {
+		Port int `yaml:"port"`
+	} `yaml:"server"`
 }
 
 func main() {
-	config, err := loadConfig("config.yaml")
+	// Load configuration
+	var config Config
+	data, err := os.ReadFile("config.yaml")
 	if err != nil {
-		log.Fatalf("Error loading config: %v", err)
+		panic(err)
+	}
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		panic(err)
 	}
 
-	albums, err = loadAlbums("albums.json")
-	if err != nil {
-		log.Fatalf("Error loading albums: %v", err)
+	router := gin.Default()
+	router.GET("/albums", getAlbums)
+
+	router.Run(":" + strconv.Itoa(config.Server.Port))
+}
+func getAlbums(c *gin.Context) {
+	title := c.Query("title")
+	artist := c.Query("artist")
+	price := c.Query("price")
+
+	var filteredAlbums []Album
+	for _, album := range albums {
+		if (title == "" || strings.Contains(strings.ToLower(album.Title), strings.ToLower(title))) &&
+			(artist == "" || strings.Contains(strings.ToLower(album.Artist), strings.ToLower(artist))) &&
+			(price == "" || fmt.Sprintf("%.2f", album.Price) == price) {
+			filteredAlbums = append(filteredAlbums, album)
+		}
 	}
 
-	http.HandleFunc("/albums", albumsHandler)
-	address := fmt.Sprintf("%s:%s", config.Server.Host, config.Server.Port)
-	log.Printf("Server starting on %s\n", address)
-	log.Fatal(http.ListenAndServe(address, nil))
+	c.IndentedJSON(http.StatusOK, filteredAlbums)
 }

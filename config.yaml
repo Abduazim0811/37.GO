@@ -1,0 +1,14 @@
+server:
+  host: localhost
+  port: '9001'
+database:
+  postgres:
+    host: localhost
+    username: postgres
+    password: 'Abdu0811'
+    post: ''
+    name: ''
+filter:
+  artist: ''
+  title: ''
+  price: 0
